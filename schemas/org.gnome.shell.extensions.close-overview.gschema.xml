@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.close-overview" path="/org/gnome/shell/extensions/close-overview/">
+    <key name="close-on-left-click" type="b">
+      <default>true</default>
+      <summary>Close on left click</summary>
+    </key>
+    <key name="close-on-right-click" type="b">
+      <default>true</default>
+      <summary>Close on right click</summary>
+    </key>
+  </schema>
+</schemalist>

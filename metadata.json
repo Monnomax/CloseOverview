@@ -1,0 +1,9 @@
+{
+  "name": "Close Overview",
+  "description": "Закрити Activities Overview та AppGrid кліком на порожньому місці",
+  "uuid": "close-overview@local",
+  "settings-schema": "org.gnome.shell.extensions.close-overview",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "gtk-version": ["4.0"],
+  "version": 1
+}
