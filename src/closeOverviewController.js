@@ -1,4 +1,5 @@
 import Clutter from "gi://Clutter";
+
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 export default class CloseOverviewController {
@@ -10,145 +11,178 @@ export default class CloseOverviewController {
     enable() {
         this._handlerId = global.stage.connect(
             "button-press-event",
-            (actor, event) => this._handleButtonPress(event),
+            (_actor, event) => this._handleButtonPress(event),
         );
     }
 
     disable() {
-        if (this._handlerId) {
+        if (this._handlerId !== null) {
             global.stage.disconnect(this._handlerId);
             this._handlerId = null;
         }
+
         this._settings = null;
     }
 
     _handleButtonPress(event) {
-        if (!Main.overview.visible) {
-            return Clutter.EVENT_PROPAGATE;
-        }
+        if (!Main.overview.visible) return Clutter.EVENT_PROPAGATE;
 
         const button = event.get_button();
-        const leftClickEnabled = this._settings.get_boolean(
-            "close-on-left-click",
+
+        /*
+         * Middle click:
+         * close the WindowPreview under the pointer.
+         */
+        if (button === 2) return this._handleMiddleClick(event);
+
+        /*
+         * Only left and right clicks can close Overview.
+         */
+        if (button !== 1 && button !== 3) return Clutter.EVENT_PROPAGATE;
+
+        const setting =
+            button === 1 ? "close-on-left-click" : "close-on-right-click";
+
+        if (!this._settings.get_boolean(setting))
+            return Clutter.EVENT_PROPAGATE;
+
+        const [x, y] = event.get_coords();
+
+        /*
+         * Pick the actor that is actually reactive at the pointer.
+         */
+        const target = global.stage.get_actor_at_pos(
+            Clutter.PickMode.REACTIVE,
+            x,
+            y,
         );
-        const rightClickEnabled = this._settings.get_boolean(
-            "close-on-right-click",
-        );
 
-        if (
-            (button === 1 && leftClickEnabled) ||
-            (button === 3 && rightClickEnabled)
-        ) {
-            const target = this._getEventTarget(event);
-
-            if (this._isBackgroundClick(target)) {
-                console.log(
-                    `[Close Overview] Клік по фону (${target?.constructor.name}). Закриваємо.`,
-                );
-                Main.overview.hide();
-                return Clutter.EVENT_STOP;
-            }
-
-            console.log(
-                `[Close Overview] Клік по об'єкту: ${target?.constructor.name}. Ігноруємо.`,
-            );
-        } else if (button === 2) {
-            const target = this._getEventTarget(event);
-            const windowPreview = this._getWindowPreview(target);
-
-            if (windowPreview && windowPreview.metaWindow) {
-                console.log(
-                    `[Close Overview] Закриваємо вікно середньою кнопкою миші.`,
-                );
-                windowPreview.metaWindow.delete(global.get_current_time());
-                return Clutter.EVENT_STOP;
-            }
+        /*
+         * Nothing reactive under the pointer:
+         * treat it as background.
+         */
+        if (!target) {
+            Main.overview.hide();
+            return Clutter.EVENT_STOP;
         }
 
+        /*
+         * Determine whether the reactive target represents
+         * one of the Overview background areas.
+         */
+        if (this._isBackgroundTarget(target)) {
+            Main.overview.hide();
+            return Clutter.EVENT_STOP;
+        }
+
+        /*
+         * An actual interactive object was clicked.
+         * Let GNOME handle it normally.
+         */
         return Clutter.EVENT_PROPAGATE;
     }
 
-    _getEventTarget(event) {
+    _isBackgroundTarget(target) {
+        /*
+         * ---------------------------------------------------------
+         * 1. Empty Overview background
+         * ---------------------------------------------------------
+         *
+         * Here the reactive actor itself is overviewGroup.
+         */
+        if (
+            typeof target.get_name === "function" &&
+            target.get_name() === "overviewGroup"
+        ) {
+            return true;
+        }
+
+        /*
+         * ---------------------------------------------------------
+         * 2. Empty AppGrid background
+         * ---------------------------------------------------------
+         *
+         * Important:
+         * apps-scroll-view must be the ACTUAL reactive target.
+         *
+         * We must NOT search all ancestors for apps-scroll-view,
+         * otherwise clicking a FolderIcon/AppIcon would incorrectly
+         * be treated as a background click.
+         */
+        if (
+            typeof target.get_style_class_name === "function" &&
+            target.get_style_class_name() === "apps-scroll-view"
+        ) {
+            return true;
+        }
+
+        /*
+         * ---------------------------------------------------------
+         * 3. WindowPicker
+         * ---------------------------------------------------------
+         *
+         * WindowPicker is different from AppGrid.
+         * GNOME can return a Clutter.Actor inside the Workspace,
+         * therefore we need to walk upward.
+         *
+         * But if we encounter a WindowPreview first, this is an
+         * actual window and must NOT close Overview.
+         */
+        let current = target;
+
+        while (current) {
+            /*
+             * Actual window preview.
+             */
+            if (current.constructor?.name === "WindowPreview") return false;
+
+            /*
+             * Workspace background.
+             */
+            if (
+                typeof current.get_style_class_name === "function" &&
+                current.get_style_class_name() === "window-picker"
+            ) {
+                return true;
+            }
+
+            current = current.get_parent?.() ?? null;
+        }
+
+        return false;
+    }
+
+    _handleMiddleClick(event) {
         const [x, y] = event.get_coords();
+
         const target = global.stage.get_actor_at_pos(
             Clutter.PickMode.ALL,
             x,
             y,
         );
-        if (target) return target;
 
-        if (typeof event.get_source === "function") {
-            return event.get_source();
+        const windowPreview = this._getWindowPreview(target);
+
+        if (windowPreview?.metaWindow) {
+            windowPreview.metaWindow.delete(global.get_current_time());
+
+            return Clutter.EVENT_STOP;
         }
 
-        return null;
-    }
-
-    _isBackgroundClick(target) {
-        if (!target) return true;
-
-        const ignoredTypes = [
-            "BaseAppIcon",
-            "WindowPreview",
-            "SearchEntry",
-            "Dash",
-            "StButton",
-            "AppIcon",
-            "PrevPage",
-            "NextPage",
-            "PageButton",
-            "PageIndicators",
-            "page-indicator",
-            "page-navigation-arrow",
-            "page-navigation-hint",
-            "previous",
-            "next",
-        ];
-
-        let current = target;
-        while (current) {
-            const typeName = current.constructor.name || "";
-            const name =
-                typeof current.get_name === "function"
-                    ? current.get_name()
-                    : "";
-            const safeName = name || "";
-            const styleClass =
-                typeof current.get_style_class_name === "function"
-                    ? current.get_style_class_name()
-                    : "";
-            const safeStyleClass = styleClass || "";
-
-            if (
-                ignoredTypes.some(
-                    (type) =>
-                        typeName.toLowerCase().includes(type.toLowerCase()) ||
-                        safeName.toLowerCase().includes(type.toLowerCase()) ||
-                        safeStyleClass
-                            .toLowerCase()
-                            .includes(type.toLowerCase()),
-                )
-            ) {
-                return false;
-            }
-
-            current = current.get_parent();
-        }
-
-        return true;
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _getWindowPreview(target) {
         if (!target) return null;
 
         let current = target;
+
         while (current) {
-            const typeName = current.constructor.name || "";
-            if (typeName === "WindowPreview") {
-                return current;
-            }
-            current = current.get_parent();
+            if (current.constructor?.name === "WindowPreview") return current;
+
+            current = current.get_parent?.() ?? null;
         }
+
         return null;
     }
 }
