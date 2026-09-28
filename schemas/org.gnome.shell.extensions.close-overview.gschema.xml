@@ -9,5 +9,9 @@
       <default>true</default>
       <summary>Close on right click</summary>
     </key>
+    <key name="close-on-middle-click" type="b">
+      <default>true</default>
+      <summary>Close on middle click</summary>
+    </key>
   </schema>
 </schemalist>

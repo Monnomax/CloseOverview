@@ -42,6 +42,20 @@ export default class CloseOverviewPreferences extends ExtensionPreferences {
     rightClickRow.add_suffix(rightClickSwitch);
     group.add(rightClickRow);
 
+    const middleClickRow = new Adw.ActionRow({ title: "Середній клік" });
+    const middleClickSwitch = new Gtk.Switch({
+      active: settings.get_boolean("close-on-middle-click"),
+      valign: 3,
+    });
+    settings.bind(
+      "close-on-middle-click",
+      middleClickSwitch,
+      "active",
+      Gio.SettingsBindFlags.DEFAULT,
+    );
+    middleClickRow.add_suffix(middleClickSwitch);
+    group.add(middleClickRow);
+
     window.add(page);
   }
 }

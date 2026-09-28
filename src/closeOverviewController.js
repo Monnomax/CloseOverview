@@ -31,9 +31,15 @@ export default class CloseOverviewController {
 
         /*
          * Middle click:
-         * close the WindowPreview under the pointer.
+         * close the Overview background or the WindowPreview
+         * when the corresponding setting is enabled.
          */
-        if (button === 2) return this._handleMiddleClick(event);
+        if (button === 2) {
+            if (!this._settings.get_boolean("close-on-middle-click"))
+                return Clutter.EVENT_PROPAGATE;
+
+            return this._handleMiddleClick(event);
+        }
 
         /*
          * Only left and right clicks can close Overview.
@@ -156,15 +162,28 @@ export default class CloseOverviewController {
         const [x, y] = event.get_coords();
 
         const target = global.stage.get_actor_at_pos(
-            Clutter.PickMode.ALL,
+            Clutter.PickMode.REACTIVE,
             x,
             y,
         );
 
         const windowPreview = this._getWindowPreview(target);
 
+        /*
+         * Middle click on a WindowPreview closes that window.
+         */
         if (windowPreview?.metaWindow) {
             windowPreview.metaWindow.delete(global.get_current_time());
+
+            return Clutter.EVENT_STOP;
+        }
+
+        /*
+         * Middle click on Overview/AppGrid/Workspace background
+         * closes Overview.
+         */
+        if (!target || this._isBackgroundTarget(target)) {
+            Main.overview.hide();
 
             return Clutter.EVENT_STOP;
         }
